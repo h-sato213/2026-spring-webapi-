@@ -56,5 +56,5 @@ private final KakeboService kakeboService;
 
         return ResponseEntity.ok(kakebo);
     }
-    
+
 }

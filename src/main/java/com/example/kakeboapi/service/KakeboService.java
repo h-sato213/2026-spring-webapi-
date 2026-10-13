@@ -68,7 +68,4 @@ public class KakeboService {
         return kakeboRepository.update(kakebo);
     }
 
-    public int selectSum() {
-        return kakeboRepository.selectSum();
-    }
 }

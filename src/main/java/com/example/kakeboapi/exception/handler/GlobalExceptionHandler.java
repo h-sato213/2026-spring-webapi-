@@ -19,4 +19,5 @@ public class GlobalExceptionHandler {
     public ResponseEntity<String> handleKakeboArgumentNotValidException(KakeboArgumentNotValidException e){
         return ResponseEntity.badRequest().body(e.getMessage());
     }
+
 }

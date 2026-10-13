@@ -34,7 +34,4 @@ public class KakeboRepository {
         return kakebo;
     }
 
-    public int selectSum() {
-        return kakeboMapper.selectSum();
-    }
 }
