@@ -56,17 +56,5 @@ private final KakeboService kakeboService;
 
         return ResponseEntity.ok(kakebo);
     }
-
-    @GetMapping("/sum")
-    public ResponseEntity<Integer> selectSum(){
-        // Serviceから取得した合計金額を直接 ok() に渡す
-        Integer totalSum = kakeboService.selectSum();
-
-        // もしデータベースが空の時に null が返ってくる場合は、0に変換して返す安全策
-        if (totalSum == null) {
-            totalSum = 0;
-        }
-
-        return ResponseEntity.ok(totalSum);
-    }
+    
 }
