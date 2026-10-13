@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>家計簿管理</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; max-width: 900px; }
+        form { margin-bottom: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .form-group { margin-bottom: 10px; }
+        label { display: inline-block; width: 80px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        button { cursor: pointer; padding: 5px 10px; margin-right: 5px; }
+        .btn-add { background-color: #4CAF50; color: white; border: none; }
+        .btn-update { background-color: #008CBA; color: white; border: none; }
+        .btn-delete { background-color: #f44336; color: white; border: none; }
+        .search-box { margin-bottom: 20px; padding: 10px; background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+<h1>家計簿管理アプリケーション</h1>
+
+<!-- 1件検索フォーム -->
+<div class="search-box">
+    <label for="searchId">ID検索:</label>
+    <input type="number" id="searchId" placeholder="検索したいIDを入力">
+    <button onclick="fetchOneKakebo()">検索</button>
+    <button onclick="fetchAllKakebo()">全件表示に戻す</button>
+</div>
+
+<!-- 入力・編集フォーム -->
+<form id="kakeboForm">
+    <h3 id="formTitle">データの新規追加</h3>
+    <input type="hidden" id="kakeboId">
+
+    <div class="form-group">
+        <label for="title">品目:</label>
+        <input type="text" id="title" required placeholder="例：食費、電気代">
+    </div>
+    <div class="form-group">
+        <label for="value">金額:</label>
+        <input type="number" id="value" required placeholder="例：5000">
+    </div>
+
+    <button type="submit" id="submitBtn" class="btn-add">追加</button>
+    <button type="button" id="cancelBtn" style="display: none;" onclick="resetForm()">キャンセル</button>
+</form>
+
+<!-- データ一覧テーブル -->
+<h2>家計簿一覧</h2>
+<table>
+    <thead>
+    <tr>
+        <th>ID</th>
+        <th>品目</th>
+        <th>金額</th>
+        <th>追加日時</th>
+        <th>操作</th>
+    </tr>
+    </thead>
+    <tbody id="kakeboTableBody">
+    <!-- JavaScriptでここにデータを挿入します -->
+    </tbody>
+</table>
+
+<script>
+    const API_URL = '/api/kakebo';
+
+    // ページ読み込み時に一覧を取得
+    document.addEventListener('DOMContentLoaded', fetchAllKakebo);
+
+    // フォーム送信時の処理（新規追加 または 更新）
+    document.getElementById('kakeboForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const id = document.getElementById('kakeboId').value;
+        const title = document.getElementById('title').value;
+        const value = parseInt(document.getElementById('value').value, 10);
+
+        const kakeboData = { title, value };
+
+        if (id) {
+            updateKakebo(id, kakeboData);
+        } else {
+            insertKakebo(kakeboData);
+        }
+    });
+
+    // 日時フォーマットの変換関数 (例: 2026-10-09T10:30:00 -> 2026/10/09 10:30:00)
+    function formatDate(dateString) {
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return dateString; // 変換できない場合はそのまま返す
+
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        const hh = String(date.getHours()).padStart(2, '0');
+        const mi = String(date.getMinutes()).padStart(2, '0');
+        const ss = String(date.getSeconds()).padStart(2, '0');
+
+        return `${yyyy}年${mm}月${dd}日 ${hh}時${mi}分${ss}秒`;
+    }
+
+    // テーブルの行を生成して追加する共通関数
+    function appendRow(kakebo) {
+        const tbody = document.getElementById('kakeboTableBody');
+        const tr = document.createElement('tr');
+
+        // Java側から返ってくる日時フィールド名（createdAt）を想定してフォーマット
+        const formattedDate = formatDate(kakebo.createdAt);
+
+        tr.innerHTML = `
+                <td>${kakebo.id}</td>
+                <td>${kakebo.title || ''}</td>
+                <td>${kakebo.value || 0} 円</td>
+                <td>${formattedDate}</td>
+                <td>
+                    <button class="btn-update" onclick="loadKakeboForEdit(${kakebo.id})">編集</button>
+                    <button class="btn-delete" onclick="deleteKakebo(${kakebo.id})">削除</button>
+                </td>
+            `;
+        tbody.appendChild(tr);
+    }
+
+    // 1. 全件取得 (GET /api/kakebo)
+    async function fetchAllKakebo() {
+        try {
+            const response = await fetch(API_URL);
+            if (!response.ok) throw new Error('一覧の取得に失敗しました');
+            const kakebos = await response.json();
+
+            document.getElementById('kakeboTableBody').innerHTML = '';
+            document.getElementById('searchId').value = '';
+            kakebos.forEach(kakebo => appendRow(kakebo));
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+    // 1件だけ取得して絞り込み表示 (GET /api/kakebo/{id})
+    async function fetchOneKakebo() {
+        const id = document.getElementById('searchId').value;
+        if (!id) {
+            alert('検索するIDを入力してください');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_URL}/${id}`);
+            if (response.status === 404) {
+                throw new Error('該当するデータが見つかりませんでした');
+            }
+            if (!response.ok) throw new Error('データの取得に失敗しました');
+
+            const kakebo = await response.json();
+
+            document.getElementById('kakeboTableBody').innerHTML = '';
+            appendRow(kakebo);
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+
+    // 2. 新規追加 (POST /api/kakebo)
+    async function insertKakebo(data) {
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (!response.ok) throw new Error('追加に失敗しました');
+
+            resetForm();
+            fetchAllKakebo();
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+    // 3. 編集データ読み込み (GET /api/kakebo/{id})
+    async function loadKakeboForEdit(id) {
+        try {
+            const response = await fetch(`${API_URL}/${id}`);
+            if (!response.ok) throw new Error('データの取得に失敗しました');
+            const kakebo = await response.json();
+
+            document.getElementById('kakeboId').value = kakebo.id;
+            document.getElementById('title').value = kakebo.title || '';
+            document.getElementById('value').value = kakebo.value || '';
+
+            document.getElementById('formTitle').innerText = 'データの編集 (ID: ' + id + ')';
+            document.getElementById('submitBtn').innerText = '更新';
+            document.getElementById('submitBtn').className = 'btn-update';
+            document.getElementById('cancelBtn').style.display = 'inline-block';
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+    // 4. 更新処理 (PUT /api/kakebo/{id})
+    async function updateKakebo(id, data) {
+        try {
+            data.id = parseInt(id, 10);
+
+            const response = await fetch(`${API_URL}/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (!response.ok) throw new Error('更新に失敗しました');
+
+            resetForm();
+            fetchAllKakebo();
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+    // 5. 削除処理 (DELETE /api/kakebo/{id})
+    async function deleteKakebo(id) {
+        if (!confirm('本当に削除しますか？')) return;
+
+        try {
+            const response = await fetch(`${API_URL}/${id}`, {
+                method: 'DELETE'
+            });
+            if (!response.ok) throw new Error('削除に失敗しました');
+
+            fetchAllKakebo();
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+    // フォームのリセット
+    function resetForm() {
+        document.getElementById('kakeboForm').reset();
+        document.getElementById('kakeboId').value = '';
+        document.getElementById('formTitle').innerText = 'データの新規追加';
+        document.getElementById('submitBtn').innerText = '追加';
+        document.getElementById('submitBtn').className = 'btn-add';
+        document.getElementById('cancelBtn').style.display = 'none';
+    }
+</script>
+</body>
+</html>
