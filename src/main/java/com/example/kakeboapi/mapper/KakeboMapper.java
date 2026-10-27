@@ -23,4 +23,5 @@ public interface KakeboMapper {
     @Update("UPDATE kakebo SET title = #{title}, value = #{value} WHERE id = #{id}")
     int update(Kakebo kakebo);
 
+
 }
